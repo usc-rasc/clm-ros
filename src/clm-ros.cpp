@@ -1,9 +1,58 @@
+///////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2014, University of Southern California and University of Cambridge,
+// all rights reserved.
+//
+// THIS SOFTWARE IS PROVIDED AS IS AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+// AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+// INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY. OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+//
+// Notwithstanding the license granted herein, Licensee acknowledges that certain components
+// of the Software may be covered by so-called open source software licenses (Open Source
+// Components), which means any software licenses approved as open source licenses by the
+// Open Source Initiative or any substantially similar licenses, including without limitation any
+// license that, as a condition of distribution of the software licensed under such license,
+// requires that the distributor make the software available in source code format. Licensor shall
+// provide a list of Open Source Components for a particular version of the Software upon
+// Licensees request. Licensee will comply with the applicable terms of such licenses and to
+// the extent required by the licenses covering Open Source Components, the terms of such
+// licenses will apply in lieu of the terms of this Agreement. To the extent the terms of the
+// licenses applicable to Open Source Components prohibit any of the restrictions in this
+// License Agreement with respect to such Open Source Component, such restrictions will not
+// apply to such Open Source Component. To the extent the terms of the licenses applicable to
+// Open Source Components require Licensor to make an offer to provide source code or
+// related information in connection with the Software, such offer is hereby made. Any request
+// for source code or related information should be directed to cl-face-tracker-distribution@lists.cam.ac.uk
+// Licensee acknowledges receipt of notices for the Open Source Components for the initial
+// delivery of the Software.
+
+//     * Any publications arising from the use of this software, including but
+//       not limited to academic journal and conference publications, technical
+//       reports and manuals, must cite one of the following works:
+//
+//       Tadas Baltrusaitis, Peter Robinson, and Louis-Philippe Morency. 3D
+//       Constrained Local Model for Rigid and Non-Rigid Facial Tracking.
+//       IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2012.    
+//
+//       Tadas Baltrusaitis, Peter Robinson, and Louis-Philippe Morency. 
+//       Constrained Local Neural Fields for robust facial landmark detection in the wild.
+//       in IEEE Int. Conference on Computer Vision Workshops, 300 Faces in-the-Wild Challenge, 2013.    
+//
+///////////////////////////////////////////////////////////////////////////////
 
 // SimpleCLM.cpp : Defines the entry point for the console application.
 #include "CLM_core.h"
-
+#include <iomanip>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #include <opencv2/videoio/videoio.hpp>  // Video write
 #include <opencv2/videoio/videoio_c.h>  // Video write
@@ -52,9 +101,8 @@ int main (int argc, char **argv)
 	// By default try webcam 0
 	int device = 0;
 
-	// cx and cy aren't necessarilly in the image center, so need to be 
-	//able to override it (start with unit vals and init them if none specified)
-    	float fx = 500, fy = 500, cx = 0, cy = 0;
+	// cx and cy aren't necessarilly in the image center, so need to be able to override it (start with unit vals and init them if none specified)
+    float fx = 500, fy = 500, cx = 0, cy = 0;
 			
 	CLMTracker::CLMParameters clm_parameters(arguments);
 
@@ -96,7 +144,8 @@ int main (int argc, char **argv)
 			// If we want to write out from webcam
 			f_n = 0;
 		}
-	
+
+		bool use_depth = !depth_directories.empty();	
 
 		// Do some grabbing
 		VideoCapture video_capture;
@@ -134,6 +183,19 @@ int main (int argc, char **argv)
 		{
 			pose_output_file.open (pose_output_files[f_n], ios_base::out);
 		}
+	
+		std::ofstream landmarks_output_file;		
+		if(!landmark_output_files.empty())
+		{
+			landmarks_output_file.open(landmark_output_files[f_n], ios_base::out);
+		}
+
+		std::ofstream landmarks_3D_output_file;
+		if(!landmark_3D_output_files.empty())
+		{
+			landmarks_3D_output_file.open(landmark_3D_output_files[f_n], ios_base::out);
+		}
+	
 		int frame_count = 0;
 		
 		// saving the videos
@@ -148,6 +210,8 @@ int main (int argc, char **argv)
 		double fps = 10;
 
 		INFO_STREAM( "Starting tracking");
+		pose_output_file << setw(8) << "Time," << "Confid," <<  "DetectSucc," << "PosX," << "PosY," <<  "PosZ,";
+		pose_output_file  << "RotX," <<  "RotY," << "RotZ" << endl;
 		while(!captured_image.empty())
 		{		
 
@@ -163,6 +227,30 @@ int main (int argc, char **argv)
 			{
 				grayscale_image = captured_image.clone();				
 			}
+		
+			// Get depth image
+			if(use_depth)
+			{
+				char* dst = new char[100];
+				std::stringstream sstream;
+
+				sstream << depth_directories[f_n] << "\\depth%05d.png";
+				sprintf(dst, sstream.str().c_str(), frame_count + 1);
+				// Reading in 16-bit png image representing depth
+				Mat_<short> depth_image_16_bit = imread(string(dst), -1);
+
+				// Convert to a floating point depth image
+				if(!depth_image_16_bit.empty())
+				{
+					depth_image_16_bit.convertTo(depth_image, CV_32F);
+				}
+				else
+				{
+					WARN_STREAM( "Can't find depth image" );
+				}
+			}
+			
+			// The actual facial landmark detection / tracking
 			bool detection_success = CLMTracker::DetectLandmarksInVideo(grayscale_image, depth_image, clm_model, clm_parameters);
 
 			// Work out the pose of the head from the tracked model
@@ -218,12 +306,79 @@ int main (int argc, char **argv)
 			string fpsSt("FPS:");
 			fpsSt += fpsC;
 			cv::putText(captured_image, fpsSt, cv::Point(10,20), CV_FONT_HERSHEY_SIMPLEX, 0.5, CV_RGB(255,0,0));		
+			
+			if(!clm_parameters.quiet_mode)
+			{
+				namedWindow("tracking_result",1);		
+				imshow("tracking_result", captured_image);
 
+				if(!depth_image.empty())
+				{
+					// Division needed for visualisation purposes
+					imshow("depth", depth_image/2000.0);
+				}
+			}
+
+			if(!landmark_output_files.empty())
+			{
+				landmarks_output_file << "Time " << "," << "x" << "," << "y," << endl;
+				landmarks_output_file <<frame_count/fps << endl;
+				vector <double> vx;
+				vector <double> vy;
+				for (int i = 0; i < clm_model.pdm.NumberOfPoints(); ++ i)
+				{
+					vx.push_back(clm_model.detected_landmarks.at<double>(i));
+					
+				}
+				for(int j = clm_model.pdm.NumberOfPoints(); j < clm_model.pdm.NumberOfPoints()*2 ; ++j)
+				{
+					vy.push_back(clm_model.detected_landmarks.at<double>(j));
+				}
+				for(int k = 0; k < clm_model.pdm.NumberOfPoints(); ++k)
+				{
+					landmarks_output_file << vx[k] << "," << vy[k] << "," << endl;
+				}
+				
+				landmarks_output_file << endl;
+			}
+			// Output the detected facial landmarks
+			//of3D
+			if(!landmark_3D_output_files.empty())
+			{
+				landmarks_3D_output_file << "Time: " << "," << "x," << "y," << "z," << endl;
+				landmarks_3D_output_file << frame_count/fps << endl;
+				Mat_<double> shape_3D = clm_model.GetShape(fx, fy, cx, cy);
+
+				vector <double> v3dx;
+				vector <double> v3dy;
+				vector <double> v3dz;
+
+				for (int i = 0; i < clm_model.pdm.NumberOfPoints(); ++i)
+				{
+					v3dx.push_back(shape_3D.at<double>(i));
+				}
+				for (int j = clm_model.pdm.NumberOfPoints(); j < clm_model.pdm.NumberOfPoints()*2; ++j)
+				{
+					v3dy.push_back(shape_3D.at<double>(j));
+				}
+				for (int k = clm_model.pdm.NumberOfPoints()*2; k < clm_model.pdm.NumberOfPoints()*3; ++k)
+				{
+					v3dz.push_back(shape_3D.at<double>(k));	
+				}
+				for (int l = 0; l < clm_model.pdm.NumberOfPoints(); ++l)
+				{
+					landmarks_3D_output_file << v3dx[l] << "," << v3dy[l] << "," << v3dz[l] << "," << endl;
+				}
+				
+				landmarks_3D_output_file << endl;
+			}
+			
 			// Output the estimated head pose
+			//op
 			if(!pose_output_files.empty())
 			{
 				double confidence = 0.5 * (1 - detection_certainty);
-				pose_output_file << "Framecount+1" << frame_count + 1 << " " << "Confidence: " << confidence << " " << "Detection Success: " << detection_success << " " << "(" << pose_estimate_CLM[0] << " " << pose_estimate_CLM[1] << " " << pose_estimate_CLM[2] << " " << pose_estimate_CLM[3] << " " << pose_estimate_CLM[4] << " " << pose_estimate_CLM[5] << ")" << endl;
+				pose_output_file << (frame_count)/fps << "," << confidence << "," << detection_success << "," << pose_estimate_CLM[0] << " ," << pose_estimate_CLM[1] << "," << pose_estimate_CLM[2] << "," << pose_estimate_CLM[3] << "," << pose_estimate_CLM[4] << "," << pose_estimate_CLM[5] << "," << endl;
 			}				
 
 			// output the tracked video
@@ -233,6 +388,20 @@ int main (int argc, char **argv)
 			}
 
 			video_capture >> captured_image;
+		
+			// detect key presses
+			char character_press = cv::waitKey(1);
+			
+			// restart the tracker
+			if(character_press == 'r')
+			{
+				clm_model.Reset();
+			}
+			// quit the application
+			else if(character_press=='q')
+			{
+				return(0);
+			}
 
 			// Update the frame count
 			frame_count++;
@@ -245,6 +414,7 @@ int main (int argc, char **argv)
 		clm_model.Reset();
 
 		pose_output_file.close();
+		landmarks_output_file.close();
 
 		// break out of the loop if done with all the files (or using a webcam)
 		if(f_n == files.size() -1 || files.empty())
@@ -255,3 +425,4 @@ int main (int argc, char **argv)
 
 	return 0;
 }
+
