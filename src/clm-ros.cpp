@@ -3,9 +3,10 @@
 
 #include <fstream>
 #include <sstream>
-
-#include <opencv2/videoio/videoio.hpp>  // Video write
-#include <opencv2/videoio/videoio_c.h>  // Video write
+#include <ros/ros.h>
+#include <image_transport/image_transport.h>
+//#include <opencv2/videoio/videoio.hpp>  // Video write
+//#include <opencv2/videoio/videoio_c.h>  // Video write
 
 
 #define INFO_STREAM( stream ) \
@@ -28,7 +29,8 @@ printErrorAndAbort( std::string( "Fatal error: " ) + stream )
 
 using namespace std;
 using namespace cv;
-
+using namespace cv_bridge;
+/*
 vector<string> get_arguments(int argc, char **argv)
 {
 
@@ -39,12 +41,12 @@ vector<string> get_arguments(int argc, char **argv)
 		arguments.push_back(string(argv[i]));
 	}
 	return arguments;
-}
+}*/
 
 // Some globals for tracking timing information for visualisation
 double fps_tracker = -1.0;
 int64 t0 = 0;
-
+/*
 // Visualising the results
 void visualise_tracking(Mat& captured_image, Mat_<float>& depth_image, const CLMTracker::CLM& clm_model, const CLMTracker::CLMParameters& clm_parameters, int frame_count, double fx, double fy, double cx, double cy)
 {
@@ -106,27 +108,31 @@ void visualise_tracking(Mat& captured_image, Mat_<float>& depth_image, const CLM
 
 	}
 }
-
+*/
 int main (int argc, char **argv)
 {
+	ros::NodeHandle nh;
+	image_transport::ImageTransport it(nh);
+	image_transport::Subscriber sub = it.subscribe("in_image_base_topic", 1, imageCallback);
+	image_transport::Publisher pub = it.advertise("out_image_base_topic", 1);
 
-	vector<string> arguments = get_arguments(argc, argv);
+	//vector<string> arguments = get_arguments(argc, argv);
 
 	// Some initial parameters that can be overriden from command line	
-	vector<string> files, depth_directories, pose_output_files, tracked_videos_output, landmark_output_files, landmark_3D_output_files;
+	//vector<string> files, depth_directories, pose_output_files, tracked_videos_output, landmark_output_files, landmark_3D_output_files;
 	
 	// By default try webcam 0
-	int device = 0;
+	//int device = 0;
 
 
 
-	CLMTracker::CLMParameters clm_parameters(arguments);
+	//CLMTracker::CLMParameters clm_parameters(arguments);
 
 	// Get the input output file parameters
 	
 	// Indicates that rotation should be with respect to camera plane or with respect to camera
-	bool use_camera_plane_pose;
-	CLMTracker::get_video_input_output_params(files, depth_directories, pose_output_files, tracked_videos_output, landmark_output_files, landmark_3D_output_files, use_camera_plane_pose, arguments);
+	//bool use_camera_plane_pose;
+	//CLMTracker::get_video_input_output_params(files, depth_directories, pose_output_files, tracked_videos_output, landmark_output_files, landmark_3D_output_files, use_camera_plane_pose, arguments);
 	
 	// The modules that are being used for tracking
 	CLMTracker::CLM clm_model(clm_parameters.model_location);	
@@ -154,7 +160,7 @@ int main (int argc, char **argv)
 
 	while(!done) // this is not a for loop as we might also be reading from a webcam
 	{
-		
+		/*
 		string current_file;
 
 		// We might specify multiple video files as arguments
@@ -200,9 +206,9 @@ int main (int argc, char **argv)
 
 		if( !video_capture.isOpened() ) FATAL_STREAM( "Failed to open video source" );
 		else INFO_STREAM( "Device or file opened");
-
+		*/
 		Mat captured_image;
-		video_capture >> captured_image;		
+		//video_capture >> captured_image;		
 
 		// If optical centers are not defined just use center of image
 		if (cx_undefined)
@@ -340,13 +346,13 @@ int main (int argc, char **argv)
 			{
 				pose_estimate_CLM = CLMTracker::GetCorrectedPoseCamera(clm_model, fx, fy, cx, cy);
 			}
-
+			/*
 			// Visualising the results
 			// Drawing the facial landmarks on the face and the bounding box around it if tracking is successful and initialised
 			double detection_certainty = clm_model.detection_certainty;
 
 			visualise_tracking(captured_image, depth_image, clm_model, clm_parameters, frame_count, fx, fy, cx, cy);
-
+			*/
 			// Output the detected facial landmarks
 			if(!landmark_output_files.empty())
 			{
@@ -380,13 +386,13 @@ int main (int argc, char **argv)
 					<< ", " << pose_estimate_CLM[0] << ", " << pose_estimate_CLM[1] << ", " << pose_estimate_CLM[2]
 					<< ", " << pose_estimate_CLM[3] << ", " << pose_estimate_CLM[4] << ", " << pose_estimate_CLM[5] << endl;
 			}
-
+			/*
 			// output the tracked video
 			if(!tracked_videos_output.empty())
 			{		
 				writerFace << captured_image;
 			}
-
+			*/
 			video_capture >> captured_image;
 		
 			// detect key presses
