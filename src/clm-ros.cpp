@@ -59,55 +59,54 @@ void image_callback(const sensor_msgs::ImageConstPtr& msg)
 		fx = (fx + fy) / 2.0;
 		fy = fx;
 	}
-  Mat_<float> depth_image;
-  Mat_<uchar> grayscale_image; 
+  
+  while(!captured_image.empty())
+  {   
+    Mat_<float> depth_image;
+    Mat_<uchar> grayscale_image; 
 
-  if(captured_image.channels() == 3)
-  {
-    cvtColor(captured_image, grayscale_image, CV_BGR2GRAY);       
-  }
-  else
-  {
-    grayscale_image = captured_image.clone();       
-  }
-    
-  // Get depth image
-  if(use_depth)
-  {
-    char* dst = new char[100];
-    std::stringstream sstream;
-
-    sstream << depth_directories[f_n] << "\\depth%05d.png";
-    sprintf(dst, sstream.str().c_str(), frame_count + 1);
-    // Reading in 16-bit png image representing depth
-    Mat_<short> depth_image_16_bit = imread(string(dst), -1);
-
-    // Convert to a floating point depth image
-    if(!depth_image_16_bit.empty())
+    if(captured_image.channels() == 3)
     {
-      depth_image_16_bit.convertTo(depth_image, CV_32F);
+      cvtColor(captured_image, grayscale_image, CV_BGR2GRAY);       
     }
     else
     {
-      WARN_STREAM( "Can't find depth image" );
+      grayscale_image = captured_image.clone();       
     }
-  }
-	// The actual facial landmark detection / tracking
-	bool detection_success = CLMTracker::DetectLandmarksInVideo(grayscale_image, depth_image, clm_model, clm_parameters);
-	// Work out the pose of the head from the tracked model
-	Vec6d pose_estimate_CLM;
-	if(use_camera_plane_pose)
-	{
-		pose_estimate_CLM = CLMTracker::GetCorrectedPoseCameraPlane(clm_model, fx, fy, cx, cy);
-	}
-	else
-	{
-		pose_estimate_CLM = CLMTracker::GetCorrectedPoseCamera(clm_model, fx, fy, cx, cy);
-	}
-  while(!captured_image.empty())
-  {   
+    
+    // Get depth image
+    if(use_depth)
+    {
+      char* dst = new char[100];
+      std::stringstream sstream;
 
+      sstream << depth_directories[f_n] << "\\depth%05d.png";
+      sprintf(dst, sstream.str().c_str(), frame_count + 1);
+      // Reading in 16-bit png image representing depth
+      Mat_<short> depth_image_16_bit = imread(string(dst), -1);
 
+      // Convert to a floating point depth image
+      if(!depth_image_16_bit.empty())
+      {
+        depth_image_16_bit.convertTo(depth_image, CV_32F);
+      }
+      else
+      {
+        WARN_STREAM( "Can't find depth image" );
+      }
+    }
+    // The actual facial landmark detection / tracking
+    bool detection_success = CLMTracker::DetectLandmarksInVideo(grayscale_image, depth_image, clm_model, clm_parameters);
+    // Work out the pose of the head from the tracked model
+    Vec6d pose_estimate_CLM;
+    if(use_camera_plane_pose)
+    {
+      pose_estimate_CLM = CLMTracker::GetCorrectedPoseCameraPlane(clm_model, fx, fy, cx, cy);
+    }
+    else
+    {
+      pose_estimate_CLM = CLMTracker::GetCorrectedPoseCamera(clm_model, fx, fy, cx, cy);
+    }
   }
 
   // Reset the model
