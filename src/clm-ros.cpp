@@ -37,8 +37,7 @@ int64 t0 = 0;
 
 void image_callback(const sensor_msgs::ImageConstPtr& msg)
 {
-  string model_location;
-	nh.param("~model_location", model_location, "/");
+  CLMParameters clm_param;
   // The modules that are being used for tracking
   CLMTracker::CLM clm_model(model_location);	
   CVImagePtr cv_image_ptr = cv_bridge::toCvCopy(msg);
